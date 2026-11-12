@@ -560,6 +560,7 @@ function renderWriteTab(ws, book) {
       '<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">' + esc(sec.name) + '</span>' +
       '</button>';
   }
+  listHtml += '<button class="ws-item ws-add" id="ws-add">' + ICONS.plus + ' Add a ' + bodyLabel(book).toLowerCase() + '</button>';
 
   ws.innerHTML =
     '<div class="write-layout">' +
@@ -574,6 +575,13 @@ function renderWriteTab(ws, book) {
       renderWriteTab(ws, book);
     });
   }
+  document.getElementById('ws-add').addEventListener('click', function () {
+    var ns = insertSectionInOrder(book, 'chapter');
+    ns.name = bodyLabel(book) + ' ' + chapters(book).length;
+    touch(book); save();
+    App.writeSel[book.id] = ns.id;
+    renderWriteTab(ws, book);
+  });
   renderEditor(document.getElementById('write-main'), ws, book, sel);
 }
 
@@ -581,26 +589,52 @@ function renderEditor(main, ws, book, sec) {
   if (!sec) { main.innerHTML = '<p class="muted">Pick a section on the left.</p>'; return; }
 
   if (sec.status === 'auto') {
-    var preview = '';
-    if (sec.type === 'title-page') {
-      preview = '<div class="editor-page" style="pointer-events:none"><div class="page-center">' +
-        '<div class="tp-title">' + esc(book.title) + '</div>' +
-        (book.author ? '<div class="tp-by">by</div><div class="tp-author">' + esc(book.author) + '</div>' : '') +
-        '</div></div>';
-    } else if (sec.type === 'toc') {
+    if (sec.type === 'toc') {
       var rows = '';
       var ch = chapters(book);
       for (var c = 0; c < ch.length; c++) {
         if (ch[c].status === 'skipped') continue;
-        rows += '<div class="toc-row"><span class="toc-name">' + esc(ch[c].name) + '</span><span class="toc-dots"></span><span class="toc-num">·</span></div>';
+        rows += '<div class="toc-row">' +
+          '<button class="toc-edit" data-rn="' + ch[c].id + '" aria-label="Rename ' + esc(ch[c].name) + ' in the table of contents">' + esc(ch[c].name) + ' ' + ICONS.pencil + '</button>' +
+          '<span class="toc-dots"></span><span class="toc-num">·</span></div>';
       }
-      preview = '<div class="editor-page" style="pointer-events:none"><h2 class="ch-head">Contents</h2>' + (rows || '<p class="toc-empty">Your chapters will appear here.</p>') + '</div>';
+      main.innerHTML =
+        '<div class="sec-head-row"><h2>' + esc(sec.name) + '</h2>' + statusChip(sec) + '</div>' +
+        '<div class="auto-note">Each line below is one of your ' + bodyLabel(book).toLowerCase() + 's — <strong>click a name to change how it reads</strong> (“Page 1” can become “The Old Porch”). Page numbers fill themselves in, in the reader and the PDF.</div>' +
+        '<div class="editor-page"><h2 class="ch-head">Contents</h2>' +
+        (rows || '<p class="toc-empty">Your ' + bodyLabel(book).toLowerCase() + 's will appear here as you add them.</p>') +
+        '<button class="add-chapter" id="toc-add" style="margin:20px 0 0; width:auto; padding:10px 22px; font-family:Inter,sans-serif; font-size:13.5px">' + ICONS.plus + ' Add a ' + bodyLabel(book).toLowerCase() + '</button>' +
+        '</div>';
+      var rns = main.querySelectorAll('[data-rn]');
+      for (var r = 0; r < rns.length; r++) {
+        rns[r].addEventListener('click', function () {
+          var id = this.getAttribute('data-rn');
+          var target = null;
+          for (var i2 = 0; i2 < book.sections.length; i2++) if (book.sections[i2].id === id) target = book.sections[i2];
+          if (!target) return;
+          var nn = prompt('How should this read in the table of contents?', target.name);
+          if (nn !== null && nn.trim()) {
+            target.name = nn.trim();
+            touch(book); save();
+            renderWriteTab(ws, book);
+          }
+        });
+      }
+      document.getElementById('toc-add').addEventListener('click', function () {
+        var ns = insertSectionInOrder(book, 'chapter');
+        ns.name = bodyLabel(book) + ' ' + chapters(book).length;
+        touch(book); save();
+        renderWriteTab(ws, book);
+      });
+      return;
     }
     main.innerHTML =
       '<div class="sec-head-row"><h2>' + esc(sec.name) + '</h2>' + statusChip(sec) + '</div>' +
-      '<div class="auto-note">This page builds itself from your book — nothing to write here. ' +
-      (sec.type === 'toc' ? 'Page numbers appear in the reader and in your PDF.' : 'Change the title or author with the pencil up top.') + '</div>' +
-      preview;
+      '<div class="auto-note">This page builds itself from your book — nothing to write here. Change the title or author with the pencil up top.</div>' +
+      '<div class="editor-page" style="pointer-events:none"><div class="page-center">' +
+      '<div class="tp-title">' + esc(book.title) + '</div>' +
+      (book.author ? '<div class="tp-by">by</div><div class="tp-author">' + esc(book.author) + '</div>' : '') +
+      '</div></div>';
     return;
   }
 
@@ -622,7 +656,9 @@ function renderEditor(main, ws, book, sec) {
     : 'Write your ' + sec.name.toLowerCase() + ' here…';
 
   main.innerHTML =
-    '<div class="sec-head-row"><h2 id="ed-name">' + esc(sec.name) + '</h2><span id="ed-chip">' + statusChip(sec) + '</span></div>' +
+    '<div class="sec-head-row"><div style="display:flex; align-items:center; gap:8px; min-width:0"><h2 id="ed-name">' + esc(sec.name) + '</h2>' +
+    (sec.type === 'chapter' ? '<button class="icon-btn" id="ed-rename" aria-label="Rename ' + esc(sec.name) + '">' + ICONS.pencil + '</button>' : '') +
+    '</div><span id="ed-chip">' + statusChip(sec) + '</span></div>' +
     '<div class="editor-toolbar" role="toolbar" aria-label="Formatting">' +
     '  <button class="tb-btn" data-cmd="bold" aria-label="Bold" style="font-weight:700">B</button>' +
     '  <button class="tb-btn" data-cmd="italic" aria-label="Italic" style="font-style:italic; font-family:Fraunces,serif">I</button>' +
@@ -635,6 +671,18 @@ function renderEditor(main, ws, book, sec) {
     '</div>' +
     '<div class="editor-page" id="ed" contenteditable="true" data-placeholder="' + esc(placeholder) + '">' + (sec.content || '') + '</div>' +
     '<p class="muted" style="margin:0; font-size:12.5px">Everything saves automatically as you type.</p>';
+
+  var renameBtn = document.getElementById('ed-rename');
+  if (renameBtn) {
+    renameBtn.addEventListener('click', function () {
+      var nn = prompt('Name this ' + bodyLabel(book).toLowerCase() + ' (this is how it reads in the table of contents)', sec.name);
+      if (nn !== null && nn.trim()) {
+        sec.name = nn.trim();
+        touch(book); save();
+        renderWriteTab(ws, book);
+      }
+    });
+  }
 
   var ed = document.getElementById('ed');
   if (!sec.content) ed.innerHTML = '<p><br></p>';
